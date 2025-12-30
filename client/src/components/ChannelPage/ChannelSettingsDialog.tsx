@@ -33,6 +33,7 @@ import { SubfolderAutocomplete } from '../shared/SubfolderAutocomplete';
 interface ChannelSettings {
   sub_folder: string | null;
   video_quality: string | null;
+  audio_only: boolean | null;
   min_duration: number | null;
   max_duration: number | null;
   title_filter_regex: string | null;
@@ -89,6 +90,7 @@ function ChannelSettingsDialog({
   const [settings, setSettings] = useState<ChannelSettings>({
     sub_folder: null,
     video_quality: null,
+    audio_only: null,
     min_duration: null,
     max_duration: null,
     title_filter_regex: null
@@ -96,6 +98,7 @@ function ChannelSettingsDialog({
   const [originalSettings, setOriginalSettings] = useState<ChannelSettings>({
     sub_folder: null,
     video_quality: null,
+    audio_only: null,
     min_duration: null,
     max_duration: null,
     title_filter_regex: null
@@ -172,6 +175,7 @@ function ChannelSettingsDialog({
         const loadedSettings = {
           sub_folder: settingsData.sub_folder || null,
           video_quality: settingsData.video_quality || null,
+          audio_only: settingsData.audio_only ?? null,
           min_duration: settingsData.min_duration || null,
           max_duration: settingsData.max_duration || null,
           title_filter_regex: settingsData.title_filter_regex || null
@@ -227,6 +231,7 @@ function ChannelSettingsDialog({
         body: JSON.stringify({
           sub_folder: settings.sub_folder || null,
           video_quality: settings.video_quality || null,
+          audio_only: settings.audio_only,
           min_duration: settings.min_duration,
           max_duration: settings.max_duration,
           title_filter_regex: settings.title_filter_regex || null
@@ -254,6 +259,7 @@ function ChannelSettingsDialog({
       const updatedSettings = {
         sub_folder: result?.settings?.sub_folder ?? settings.sub_folder ?? null,
         video_quality: result?.settings?.video_quality ?? settings.video_quality ?? null,
+        audio_only: result?.settings?.audio_only ?? settings.audio_only ?? null,
         min_duration: result?.settings?.min_duration ?? settings.min_duration ?? null,
         max_duration: result?.settings?.max_duration ?? settings.max_duration ?? null,
         title_filter_regex: result?.settings?.title_filter_regex ?? settings.title_filter_regex ?? null
@@ -292,6 +298,7 @@ function ChannelSettingsDialog({
   const hasChanges = () => {
     return settings.sub_folder !== originalSettings.sub_folder ||
            settings.video_quality !== originalSettings.video_quality ||
+           settings.audio_only !== originalSettings.audio_only ||
            settings.min_duration !== originalSettings.min_duration ||
            settings.max_duration !== originalSettings.max_duration ||
            settings.title_filter_regex !== originalSettings.title_filter_regex;
@@ -414,6 +421,30 @@ function ChannelSettingsDialog({
             <Typography variant="body2" color="text.secondary">
               Effective channel quality: {effectiveQualityDisplay}.
             </Typography>
+
+            <FormControl fullWidth>
+              <InputLabel id="audio-only-label" shrink>Download Mode</InputLabel>
+              <Select
+                labelId="audio-only-label"
+                value={settings.audio_only === null ? '' : settings.audio_only ? 'audio' : 'video'}
+                label="Download Mode"
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSettings({
+                    ...settings,
+                    audio_only: value === '' ? null : value === 'audio'
+                  });
+                }}
+                displayEmpty
+                notched
+              >
+                <MenuItem value="">
+                  <em>Use Global Setting ({config.audioOnlyEnabled ? 'Audio Only' : 'Video'})</em>
+                </MenuItem>
+                <MenuItem value="video">Video (Download video files)</MenuItem>
+                <MenuItem value="audio">Audio Only (Download MP3)</MenuItem>
+              </Select>
+            </FormControl>
 
             <Alert severity="info" sx={{ mb: 2 }}>
               <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>

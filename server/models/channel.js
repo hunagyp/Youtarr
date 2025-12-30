@@ -81,6 +81,11 @@ Channel.init(
       allowNull: true,
       defaultValue: null,
     },
+    audio_only: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: null,  // null = inherit global, true = audio only, false = video
+    },
   },
   {
     sequelize,

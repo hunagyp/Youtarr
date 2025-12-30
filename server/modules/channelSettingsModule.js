@@ -219,6 +219,25 @@ class ChannelSettingsModule {
   }
 
   /**
+   * Validate audio_only setting
+   * @param {boolean|null} audioOnly - Audio only setting to validate
+   * @returns {Object} - { valid: boolean, error?: string }
+   */
+  validateAudioOnly(audioOnly) {
+    // NULL is valid (use global setting)
+    if (audioOnly === null || audioOnly === undefined) {
+      return { valid: true };
+    }
+
+    // Must be a boolean
+    if (typeof audioOnly !== 'boolean') {
+      return { valid: false, error: 'audio_only must be a boolean (true/false) or null for global setting' };
+    }
+
+    return { valid: true };
+  }
+
+  /**
    * Get the full directory path for a channel, including subfolder if set
    * @param {Object} channel - Channel database record
    * @returns {string} - Full directory path
@@ -440,6 +459,7 @@ class ChannelSettingsModule {
       min_duration: channel.min_duration,
       max_duration: channel.max_duration,
       title_filter_regex: channel.title_filter_regex,
+      audio_only: channel.audio_only,
     };
   }
 
@@ -512,6 +532,14 @@ class ChannelSettingsModule {
       }
     }
 
+    // Validate audio_only if provided
+    if (settings.audio_only !== undefined) {
+      const validation = this.validateAudioOnly(settings.audio_only);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
+    }
+
     // Store old subfolder for potential move
     const oldSubFolder = channel.sub_folder;
     const newSubFolder = settings.sub_folder !== undefined ?
@@ -539,6 +567,9 @@ class ChannelSettingsModule {
       updateData.title_filter_regex = settings.title_filter_regex
         ? settings.title_filter_regex.trim()
         : null;
+    }
+    if (settings.audio_only !== undefined) {
+      updateData.audio_only = settings.audio_only;
     }
 
     // Update database FIRST to ensure changes are persisted before slow file operations
@@ -584,6 +615,7 @@ class ChannelSettingsModule {
         min_duration: updatedChannel.min_duration,
         max_duration: updatedChannel.max_duration,
         title_filter_regex: updatedChannel.title_filter_regex,
+        audio_only: updatedChannel.audio_only,
       },
       folderMoved: subFolderChanged,
       moveResult

@@ -1,0 +1,51 @@
+version: '3.8'
+
+# ISOLATED TEST STACK - Does NOT touch production Youtarr in LXC 100
+# Run from /home/peter/youtarr-source on Proxmox host
+
+services:
+  youtarr-test:
+    build: .
+    container_name: youtarr-audio-test
+    ports:
+      - "3088:3000"  # Different port from production (3087)
+    environment:
+      - TZ=Europe/Budapest
+      - YOUTARR_UID=1000
+      - YOUTARR_GID=1000
+      - DB_HOST=youtarr-test-db
+      - DB_PORT=3306
+      - DB_NAME=youtarr_test
+      - DB_USER=youtarr_test
+      - DB_PASSWORD=test_password_123
+      - AUTH_ENABLED=true
+      - AUTH_PRESET_USERNAME=admin
+      - AUTH_PRESET_PASSWORD=testtest
+      - LOG_LEVEL=debug
+    volumes:
+      - ./test-config:/app/config
+      - ./test-jobs:/app/jobs
+      - ./test-images:/app/server/images
+      - ./test-downloads:/usr/src/app/data
+    depends_on:
+      youtarr-test-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  youtarr-test-db:
+    image: mariadb:10.3
+    container_name: youtarr-test-db
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      - MYSQL_ROOT_PASSWORD=test_root_123
+      - MYSQL_DATABASE=youtarr_test
+      - MYSQL_USER=youtarr_test
+      - MYSQL_PASSWORD=test_password_123
+    volumes:
+      - ./test-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

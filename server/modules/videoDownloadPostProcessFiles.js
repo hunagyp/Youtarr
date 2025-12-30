@@ -26,6 +26,10 @@ const videoDirectory = path.dirname(videoPath);
 // Poster image uses same filename as video but with .jpg extension
 const imagePath = path.join(videoDirectory, parsedPath.name + '.jpg');
 
+// Detect if this is an audio file (MP3 from audio-only mode)
+const audioExtensions = ['.mp3', '.m4a', '.opus', '.ogg', '.flac', '.wav'];
+const isAudioFile = audioExtensions.includes(parsedPath.ext.toLowerCase());
+
 // Extract the actual channel folder name that yt-dlp created (already sanitized)
 // This is more reliable than using jsonData.uploader which may contain special characters
 // that yt-dlp sanitizes differently (e.g., #, :, <, >, etc.)
@@ -277,113 +281,119 @@ async function copyChannelPosterIfNeeded(channelId, channelFolderPath) {
       nfoGenerator.writeVideoNfoFile(videoPath, jsonData);
     }
 
-    // Add additional metadata to the MP4 file that yt-dlp might have missed
-    // yt-dlp already embeds basic metadata, but we can add more for better Plex compatibility
-    try {
-      const tempPath = videoPath + '.metadata_temp.mp4';
+    // Add additional metadata to the file
+    // For video (MP4): yt-dlp embeds basic metadata, but we add more for better Plex compatibility
+    // For audio (MP3): yt-dlp already embeds full ID3 tags via --embed-metadata, so we skip this
+    if (!isAudioFile) {
+      try {
+        const tempPath = videoPath + '.metadata_temp.mp4';
 
-      // Build metadata arguments as an array to avoid shell escaping issues
-      const ffmpegArgs = [
-        '-i', videoPath,
-        '-c', 'copy',
-        '-map_metadata', '0'
-      ];
+        // Build metadata arguments as an array to avoid shell escaping issues
+        const ffmpegArgs = [
+          '-i', videoPath,
+          '-c', 'copy',
+          '-map_metadata', '0'
+        ];
 
-      // Add genre from categories (yt-dlp doesn't embed this)
-      if (jsonData.categories && jsonData.categories.length > 0) {
-        const genre = jsonData.categories.join(';');
-        ffmpegArgs.push('-metadata', `genre=${genre}`);
-      }
-
-      // Add studio/network (channel name)
-      const channelName = jsonData.uploader || jsonData.channel || jsonData.uploader_id || '';
-      if (channelName) {
-        ffmpegArgs.push('-metadata', `network=${channelName}`);
-        ffmpegArgs.push('-metadata', `studio=${channelName}`);
-        ffmpegArgs.push('-metadata', `artist=${channelName}`);
-        ffmpegArgs.push('-metadata', `album=${channelName}`); // For collection grouping
-        ffmpegArgs.push('-metadata', `title=${channelName} - ${jsonData.title}`); // Include channel name in title
-      }
-
-      // Add tags as keywords
-      if (jsonData.tags && jsonData.tags.length > 0) {
-        const keywords = jsonData.tags.slice(0, 10).join(';');
-        ffmpegArgs.push('-metadata', `keywords=${keywords}`);
-      }
-
-      // Add release date for Plex/mp4 embedded metadata
-      // Good lord Plex is finicky
-      if (jsonData.upload_date) {
-        const year = jsonData.upload_date.substring(0, 4);
-        const month = jsonData.upload_date.substring(4, 6);
-        const day = jsonData.upload_date.substring(6, 8);
-        const releaseDate = `${year}-${month}-${day}`;
-        ffmpegArgs.push('-metadata', `release_date=${releaseDate}`);
-        ffmpegArgs.push('-metadata', `date=${releaseDate}`);
-        ffmpegArgs.push('-metadata', `year=${year}`);
-        ffmpegArgs.push('-metadata', `originaldate=${releaseDate}`);
-      }
-
-      // Add media type hint for Plex (9 = Home Video)
-      ffmpegArgs.push('-metadata', 'media_type=9');
-
-      // Output file
-      ffmpegArgs.push('-y', tempPath);
-
-      logger.info('Adding additional metadata for Plex');
-      const result = spawnSync(configModule.ffmpegPath, ffmpegArgs, {
-        stdio: 'pipe',
-        maxBuffer: 10 * 1024 * 1024
-      });
-
-      if (result.error) {
-        throw result.error;
-      }
-
-      if (result.status !== 0) {
-        const stderr = result.stderr ? result.stderr.toString() : 'Unknown error';
-        throw new Error(`ffmpeg exited with status ${result.status}: ${stderr}`);
-      }
-
-      // Replace original with temp file if successful
-      if (await fs.pathExists(tempPath)) {
-        const tempStats = await fs.stat(tempPath);
-        let origStats = null;
-        try {
-          origStats = await fs.stat(videoPath);
-        } catch (statErr) {
-          if (!statErr || statErr.code !== 'ENOENT') {
-            throw statErr;
-          }
+        // Add genre from categories (yt-dlp doesn't embed this)
+        if (jsonData.categories && jsonData.categories.length > 0) {
+          const genre = jsonData.categories.join(';');
+          ffmpegArgs.push('-metadata', `genre=${genre}`);
         }
 
-        const originalSize = origStats ? origStats.size : 0;
-        const sizeThreshold = originalSize * 0.9;
-        const sizeCheckPassed = !origStats || tempStats.size >= sizeThreshold;
+        // Add studio/network (channel name)
+        const channelName = jsonData.uploader || jsonData.channel || jsonData.uploader_id || '';
+        if (channelName) {
+          ffmpegArgs.push('-metadata', `network=${channelName}`);
+          ffmpegArgs.push('-metadata', `studio=${channelName}`);
+          ffmpegArgs.push('-metadata', `artist=${channelName}`);
+          ffmpegArgs.push('-metadata', `album=${channelName}`); // For collection grouping
+          ffmpegArgs.push('-metadata', `title=${channelName} - ${jsonData.title}`); // Include channel name in title
+        }
 
-        if (sizeCheckPassed) {
+        // Add tags as keywords
+        if (jsonData.tags && jsonData.tags.length > 0) {
+          const keywords = jsonData.tags.slice(0, 10).join(';');
+          ffmpegArgs.push('-metadata', `keywords=${keywords}`);
+        }
+
+        // Add release date for Plex/mp4 embedded metadata
+        // Good lord Plex is finicky
+        if (jsonData.upload_date) {
+          const year = jsonData.upload_date.substring(0, 4);
+          const month = jsonData.upload_date.substring(4, 6);
+          const day = jsonData.upload_date.substring(6, 8);
+          const releaseDate = `${year}-${month}-${day}`;
+          ffmpegArgs.push('-metadata', `release_date=${releaseDate}`);
+          ffmpegArgs.push('-metadata', `date=${releaseDate}`);
+          ffmpegArgs.push('-metadata', `year=${year}`);
+          ffmpegArgs.push('-metadata', `originaldate=${releaseDate}`);
+        }
+
+        // Add media type hint for Plex (9 = Home Video)
+        ffmpegArgs.push('-metadata', 'media_type=9');
+
+        // Output file
+        ffmpegArgs.push('-y', tempPath);
+
+        logger.info('Adding additional metadata for Plex');
+        const result = spawnSync(configModule.ffmpegPath, ffmpegArgs, {
+          stdio: 'pipe',
+          maxBuffer: 10 * 1024 * 1024
+        });
+
+        if (result.error) {
+          throw result.error;
+        }
+
+        if (result.status !== 0) {
+          const stderr = result.stderr ? result.stderr.toString() : 'Unknown error';
+          throw new Error(`ffmpeg exited with status ${result.status}: ${stderr}`);
+        }
+
+        // Replace original with temp file if successful
+        if (await fs.pathExists(tempPath)) {
+          const tempStats = await fs.stat(tempPath);
+          let origStats = null;
           try {
-            await moveWithRetries(tempPath, videoPath);
-            logger.info('Successfully added additional metadata to video file');
-          } catch (moveErr) {
-            logger.warn({ err: moveErr }, 'Could not replace video with metadata-enhanced version');
+            origStats = await fs.stat(videoPath);
+          } catch (statErr) {
+            if (!statErr || statErr.code !== 'ENOENT') {
+              throw statErr;
+            }
+          }
+
+          const originalSize = origStats ? origStats.size : 0;
+          const sizeThreshold = originalSize * 0.9;
+          const sizeCheckPassed = !origStats || tempStats.size >= sizeThreshold;
+
+          if (sizeCheckPassed) {
+            try {
+              await moveWithRetries(tempPath, videoPath);
+              logger.info('Successfully added additional metadata to video file');
+            } catch (moveErr) {
+              logger.warn({ err: moveErr }, 'Could not replace video with metadata-enhanced version');
+              await safeRemove(tempPath);
+            }
+          } else {
+            logger.warn('Skipped metadata update due to file size mismatch');
             await safeRemove(tempPath);
           }
-        } else {
-          logger.warn('Skipped metadata update due to file size mismatch');
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Could not add additional metadata');
+        // Clean up temp file if exists
+        const tempPath = videoPath + '.metadata_temp.mp4';
+        if (await fs.pathExists(tempPath)) {
           await safeRemove(tempPath);
         }
       }
-    } catch (err) {
-      logger.warn({ err }, 'Could not add additional metadata');
-      // Clean up temp file if exists
-      const tempPath = videoPath + '.metadata_temp.mp4';
-      if (await fs.pathExists(tempPath)) {
-        await safeRemove(tempPath);
-      }
+    } else {
+      logger.info('Audio file detected - skipping MP4 metadata embedding (ID3 tags already embedded by yt-dlp)');
     }
 
-    if (fs.existsSync(imagePath)) {
+    // Process thumbnail image (only for video files - audio has embedded thumbnail via --embed-thumbnail)
+    if (!isAudioFile && fs.existsSync(imagePath)) {
       // check if image thumbnail exists
       const newImageFullPath = path.join(newImagePath, `videothumb-${id}.jpg`); // define the new path for image thumbnail
       const newImageFullPathSmall = path.join(

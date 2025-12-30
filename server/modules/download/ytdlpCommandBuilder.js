@@ -258,6 +258,31 @@ class YtdlpCommandBuilder {
   }
 
   /**
+   * Build audio-only format string for yt-dlp
+   * @returns {string} - Format string for best audio
+   */
+  static buildAudioFormatString() {
+    // Get best audio available, with fallbacks
+    return 'bestaudio[ext=m4a]/bestaudio/best';
+  }
+
+  /**
+   * Build arguments for audio-only extraction (MP3)
+   * @param {Object} config - Configuration object
+   * @returns {string[]} - Array of audio extraction arguments
+   */
+  static buildAudioOnlyArgs(config) {
+    const audioQuality = config.audioQuality || '0'; // 0 = best quality VBR
+
+    return [
+      '-x',                      // Extract audio
+      '--audio-format', 'mp3',   // Convert to MP3
+      '--audio-quality', audioQuality,  // 0 = best quality (VBR ~245kbps)
+      '--embed-thumbnail',       // Embed video thumbnail as album art
+    ];
+  }
+
+  /**
    * Build match filter string for yt-dlp based on channel filter configuration
    * @param {Object} filterConfig - ChannelFilterConfig instance with min_duration, max_duration, title_filter_regex
    * @returns {string} - Complete match filter string for yt-dlp
@@ -316,7 +341,8 @@ class YtdlpCommandBuilder {
     resolution,
     allowRedownload = false,
     subFolder = null,
-    filterConfig = null
+    filterConfig = null,
+    isAudioOnly = false
   ) {
     const config = configModule.getConfig();
     const res = resolution || config.preferredResolution || '1080';
@@ -343,12 +369,20 @@ class YtdlpCommandBuilder {
       '--output-na-placeholder', 'Unknown Channel',
       // Clean @ prefix from uploader_id when it's used as fallback
       '--replace-in-metadata', 'uploader_id', '^@', '',
-      '-f', this.buildFormatString(res, videoCodec),
-      '--write-thumbnail',
-      '--convert-thumbnails', 'jpg',
     ];
 
-    // Add subtitle args if configured
+    // Add format and thumbnail args based on audio/video mode
+    if (isAudioOnly) {
+      // Audio-only mode: extract audio to MP3 with embedded thumbnail
+      args.push('-f', this.buildAudioFormatString());
+      args.push(...this.buildAudioOnlyArgs(config));
+    } else {
+      // Video mode: download video with separate thumbnail file
+      args.push('-f', this.buildFormatString(res, videoCodec));
+      args.push('--write-thumbnail', '--convert-thumbnails', 'jpg');
+    }
+
+    // Add subtitle args if configured (works for both audio and video)
     const subtitleArgs = this.buildSubtitleArgs(config);
     args.push(...subtitleArgs);
 
@@ -369,10 +403,14 @@ class YtdlpCommandBuilder {
       '--match-filter', matchFilter,
       '-o', outputPath,
       '--datebefore', 'now',
-      '-o', `thumbnail:${thumbnailPath}`,
-      '-o', 'pl_thumbnail:',
-      '--exec', `node ${path.resolve(__dirname, '../videoDownloadPostProcessFiles.js')} {}`
     );
+
+    // Add thumbnail output path only for video mode (audio uses --embed-thumbnail)
+    if (!isAudioOnly) {
+      args.push('-o', `thumbnail:${thumbnailPath}`);
+    }
+    args.push('-o', 'pl_thumbnail:');
+    args.push('--exec', `node ${path.resolve(__dirname, '../videoDownloadPostProcessFiles.js')} {}`);
 
     // Add Sponsorblock args if configured
     const sponsorblockArgs = this.buildSponsorblockArgs(config);
@@ -383,7 +421,7 @@ class YtdlpCommandBuilder {
 
   // Build yt-dlp command args array for manual downloads - no duration filter
   // Note: Subfolder routing is handled post-download in videoDownloadPostProcessFiles.js
-  static getBaseCommandArgsForManualDownload(resolution, allowRedownload = false) {
+  static getBaseCommandArgsForManualDownload(resolution, allowRedownload = false, isAudioOnly = false) {
     const config = configModule.getConfig();
     const res = resolution || config.preferredResolution || '1080';
     const videoCodec = config.videoCodec || 'default';
@@ -409,10 +447,18 @@ class YtdlpCommandBuilder {
       '--output-na-placeholder', 'Unknown Channel',
       // Clean @ prefix from uploader_id when it's used as fallback
       '--replace-in-metadata', 'uploader_id', '^@', '',
-      '-f', this.buildFormatString(res, videoCodec),
-      '--write-thumbnail',
-      '--convert-thumbnails', 'jpg',
     ];
+
+    // Add format and thumbnail args based on audio/video mode
+    if (isAudioOnly) {
+      // Audio-only mode: extract audio to MP3 with embedded thumbnail
+      args.push('-f', this.buildAudioFormatString());
+      args.push(...this.buildAudioOnlyArgs(config));
+    } else {
+      // Video mode: download video with separate thumbnail file
+      args.push('-f', this.buildFormatString(res, videoCodec));
+      args.push('--write-thumbnail', '--convert-thumbnails', 'jpg');
+    }
 
     // Add subtitle args if configured
     const subtitleArgs = this.buildSubtitleArgs(config);
@@ -432,10 +478,14 @@ class YtdlpCommandBuilder {
       '--match-filter', 'availability!=subscriber_only & !is_live & live_status!=is_upcoming',
       '-o', outputPath,
       '--datebefore', 'now',
-      '-o', `thumbnail:${thumbnailPath}`,
-      '-o', 'pl_thumbnail:',
-      '--exec', `node ${path.resolve(__dirname, '../videoDownloadPostProcessFiles.js')} {}`
     );
+
+    // Add thumbnail output path only for video mode (audio uses --embed-thumbnail)
+    if (!isAudioOnly) {
+      args.push('-o', `thumbnail:${thumbnailPath}`);
+    }
+    args.push('-o', 'pl_thumbnail:');
+    args.push('--exec', `node ${path.resolve(__dirname, '../videoDownloadPostProcessFiles.js')} {}`);
 
     // Add Sponsorblock args if configured
     const sponsorblockArgs = this.buildSponsorblockArgs(config);

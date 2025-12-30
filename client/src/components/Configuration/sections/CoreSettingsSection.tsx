@@ -268,6 +268,7 @@ export const CoreSettingsSection: React.FC<CoreSettingsSectionProps> = ({
                     onConfigChange({ videoCodec: e.target.value })
                   }
                   label="Preferred Video Codec"
+                  disabled={config.audioOnlyEnabled}
                 >
                   <MenuItem value="default">Default (No Preference)</MenuItem>
                   <MenuItem value="h264">H.264/AVC (Best Compatibility)</MenuItem>
@@ -282,6 +283,46 @@ export const CoreSettingsSection: React.FC<CoreSettingsSectionProps> = ({
             <Box component="span" sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
               Note: H.264 produces larger file sizes but offers maximum compatibility for Apple TV. This is a preference and will fall back to available codecs.
             </Box>
+          </Box>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    name="audioOnlyEnabled"
+                    checked={config.audioOnlyEnabled}
+                    onChange={handleCheckboxChange}
+                  />
+                }
+                label="Audio Only Mode (Download MP3)"
+              />
+              <InfoTooltip
+                text="When enabled, downloads only the audio track as MP3 instead of video. Useful for music channels or podcasts. Individual channels can override this setting."
+                onMobileClick={onMobileTooltipClick}
+              />
+            </Box>
+            {config.audioOnlyEnabled && (
+              <Box sx={{ mt: 1 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Audio Quality</InputLabel>
+                  <Select
+                    value={config.audioQuality}
+                    onChange={(e: SelectChangeEvent<string>) =>
+                      onConfigChange({ audioQuality: e.target.value })
+                    }
+                    label="Audio Quality"
+                  >
+                    <MenuItem value="0">Best Quality (VBR ~245kbps)</MenuItem>
+                    <MenuItem value="2">High Quality (~190kbps)</MenuItem>
+                    <MenuItem value="5">Medium Quality (~130kbps)</MenuItem>
+                    <MenuItem value="9">Low Quality (~65kbps)</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+            )}
           </Box>
         </Grid>
 

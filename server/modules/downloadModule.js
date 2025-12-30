@@ -158,8 +158,9 @@ class DownloadModule {
           '1080';
         const videoCount = overrideSettings.videoCount || configModule.config.channelFilesToDownload;
         const allowRedownload = !!overrideSettings.allowRedownload;
+        const isAudioOnly = configModule.config.audioOnlyEnabled || false;
 
-        const args = YtdlpCommandBuilder.getBaseCommandArgs(resolution, allowRedownload);
+        const args = YtdlpCommandBuilder.getBaseCommandArgs(resolution, allowRedownload, null, null, isAudioOnly);
         args.push('-a', tempChannelsFile);
         args.push('--playlist-end', String(videoCount));
 
@@ -388,7 +389,8 @@ class DownloadModule {
 
       // Do NOT pass subfolder to download - post-processing handles subfolder routing with __ prefix
       // Pass filter config for channel-specific duration and title filtering
-      const args = YtdlpCommandBuilder.getBaseCommandArgs(group.quality, allowRedownload, null, group.filterConfig);
+      // Pass isAudioOnly from group settings (resolved per-channel or global)
+      const args = YtdlpCommandBuilder.getBaseCommandArgs(group.quality, allowRedownload, null, group.filterConfig, group.isAudioOnly || false);
       args.push('-a', tempChannelsFile);
       args.push('--playlist-end', String(videoCount));
 
@@ -461,12 +463,30 @@ class DownloadModule {
       const allowRedownload = overrideSettings.allowRedownload || false;
       const subfolderOverride = overrideSettings.subfolder !== undefined ? overrideSettings.subfolder : null;
 
+      // Determine audio-only mode: check channel setting first, fall back to global
+      let isAudioOnly = configModule.config.audioOnlyEnabled || false;
+      if (channelId) {
+        try {
+          const Channel = require('../models/channel');
+          const channelRecord = await Channel.findOne({
+            where: { channel_id: channelId },
+            attributes: ['audio_only'],
+          });
+
+          if (channelRecord && channelRecord.audio_only !== null) {
+            isAudioOnly = channelRecord.audio_only;
+          }
+        } catch (audioErr) {
+          console.error('[DownloadModule] Error determining channel audio-only setting:', audioErr.message);
+        }
+      }
+
       // Persist resolved quality for any subsequent retries of this job
       this.setJobDataValue(jobData, 'effectiveQuality', resolution);
 
       // For manual downloads, we don't apply duration filters but still exclude members-only
       // Subfolder override is passed to post-processor via environment variable
-      const args = YtdlpCommandBuilder.getBaseCommandArgsForManualDownload(resolution, allowRedownload);
+      const args = YtdlpCommandBuilder.getBaseCommandArgsForManualDownload(resolution, allowRedownload, isAudioOnly);
 
       // Check if any URLs are for videos marked as ignored, and remove them from archive
       // This allows users to manually download videos they've marked to ignore for channel downloads

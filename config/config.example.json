@@ -5,6 +5,8 @@
   "channelDownloadFrequency": "0 * * * *",
   "preferredResolution": "1080",
   "videoCodec": "default",
+  "audioOnlyEnabled": false,
+  "audioQuality": "0",
   "defaultSubfolder": "",
   "plexIP": "",
   "plexPort": "32400",

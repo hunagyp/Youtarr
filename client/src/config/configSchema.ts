@@ -27,6 +27,8 @@ export const CONFIG_FIELDS = {
   // Video settings
   preferredResolution: { default: '1080', trackChanges: true },
   videoCodec: { default: 'default', trackChanges: true },
+  audioOnlyEnabled: { default: false, trackChanges: true },
+  audioQuality: { default: '0', trackChanges: true },
   defaultSubfolder: { default: '', trackChanges: true },
 
   // Plex integration
@@ -118,6 +120,8 @@ export const DEFAULT_CONFIG: ConfigState = {
   channelFilesToDownload: CONFIG_FIELDS.channelFilesToDownload.default,
   preferredResolution: CONFIG_FIELDS.preferredResolution.default,
   videoCodec: CONFIG_FIELDS.videoCodec.default,
+  audioOnlyEnabled: CONFIG_FIELDS.audioOnlyEnabled.default,
+  audioQuality: CONFIG_FIELDS.audioQuality.default,
   defaultSubfolder: CONFIG_FIELDS.defaultSubfolder.default,
   plexApiKey: CONFIG_FIELDS.plexApiKey.default,
   plexYoutubeLibraryId: CONFIG_FIELDS.plexYoutubeLibraryId.default,

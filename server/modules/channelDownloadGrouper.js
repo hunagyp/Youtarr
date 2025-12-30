@@ -69,7 +69,8 @@ class ChannelDownloadGrouper {
         'auto_download_enabled_tabs',
         'min_duration',
         'max_duration',
-        'title_filter_regex'
+        'title_filter_regex',
+        'audio_only'
       ]
     });
 
@@ -77,13 +78,27 @@ class ChannelDownloadGrouper {
   }
 
   /**
-   * Group channels by quality, subfolder, and filter settings for batch downloads
+   * Determine effective audio-only mode for a channel
+   * @param {Object} channel - Channel record
+   * @param {boolean} globalAudioOnly - Global audioOnlyEnabled setting
+   * @returns {boolean} - Whether this channel should download audio only
+   */
+  resolveAudioOnlyMode(channel, globalAudioOnly) {
+    // channel.audio_only: null = inherit global, true = audio only, false = video
+    if (channel.audio_only === true) return true;
+    if (channel.audio_only === false) return false;
+    return globalAudioOnly;
+  }
+
+  /**
+   * Group channels by quality, subfolder, audio mode, and filter settings for batch downloads
    * Channels with identical settings can be downloaded together in a single yt-dlp invocation
    * @param {Array} channels - Array of channel records
    * @param {string} globalQuality - Global quality setting (fallback)
-   * @returns {Array} - Array of groups, each with { quality, subfolder, filterConfig, channels }
+   * @param {boolean} globalAudioOnly - Global audio-only setting
+   * @returns {Array} - Array of groups, each with { quality, subfolder, isAudioOnly, filterConfig, channels }
    */
-  groupChannels(channels, globalQuality) {
+  groupChannels(channels, globalQuality, globalAudioOnly = false) {
     const groups = new Map();
 
     for (const channel of channels) {
@@ -93,16 +108,20 @@ class ChannelDownloadGrouper {
       // Resolve effective subfolder (handles ##USE_GLOBAL_DEFAULT## -> default, NULL -> root)
       const subFolder = channelSettingsModule.resolveEffectiveSubfolder(channel.sub_folder);
 
+      // Determine effective audio-only mode (channel override or global)
+      const isAudioOnly = this.resolveAudioOnlyMode(channel, globalAudioOnly);
+
       // Create filter config for this channel
       const filterConfig = ChannelFilterConfig.fromChannel(channel);
 
-      // Create group key including filter settings
-      const groupKey = `${quality}|${subFolder || 'root'}|${filterConfig.buildFilterKey()}`;
+      // Create group key including filter settings and audio mode
+      const groupKey = `${quality}|${subFolder || 'root'}|${isAudioOnly}|${filterConfig.buildFilterKey()}`;
 
       if (!groups.has(groupKey)) {
         groups.set(groupKey, {
           quality,
           subFolder,
+          isAudioOnly,
           filterConfig,
           channels: []
         });
@@ -140,10 +159,11 @@ class ChannelDownloadGrouper {
   async generateDownloadGroups(overrideQuality = null) {
     const channels = await this.getEnabledChannelsWithSettings();
     const globalQuality = overrideQuality || configModule.config.preferredResolution || '1080';
+    const globalAudioOnly = configModule.config.audioOnlyEnabled || false;
 
     // If override quality is specified, use it for ALL channels (ignore per-channel settings)
     if (overrideQuality) {
-      const groups = this.groupChannelsBySubfolderOnly(channels);
+      const groups = this.groupChannelsBySubfolderOnly(channels, globalAudioOnly);
       return groups.map(group => ({
         ...group,
         quality: overrideQuality,
@@ -152,8 +172,8 @@ class ChannelDownloadGrouper {
       }));
     }
 
-    // Otherwise, respect per-channel quality settings
-    const groups = this.groupChannels(channels, globalQuality);
+    // Otherwise, respect per-channel quality and audio-only settings
+    const groups = this.groupChannels(channels, globalQuality, globalAudioOnly);
 
     return groups.map(group => ({
       ...group,
@@ -163,27 +183,32 @@ class ChannelDownloadGrouper {
   }
 
   /**
-   * Group channels by subfolder and filters (for use with quality override)
-   * Quality override should not affect duration/title filters
+   * Group channels by subfolder, audio mode, and filters (for use with quality override)
+   * Quality override should not affect duration/title filters or audio mode
    * @param {Array} channels - Array of channel records
-   * @returns {Array} - Array of groups by subfolder and filter config
+   * @param {boolean} globalAudioOnly - Global audio-only setting
+   * @returns {Array} - Array of groups by subfolder, audio mode, and filter config
    */
-  groupChannelsBySubfolderOnly(channels) {
+  groupChannelsBySubfolderOnly(channels, globalAudioOnly = false) {
     const groups = new Map();
 
     for (const channel of channels) {
       // Resolve effective subfolder (handles ##USE_GLOBAL_DEFAULT## -> default, NULL -> root)
       const subFolder = channelSettingsModule.resolveEffectiveSubfolder(channel.sub_folder);
 
+      // Determine effective audio-only mode (channel override or global)
+      const isAudioOnly = this.resolveAudioOnlyMode(channel, globalAudioOnly);
+
       // Create filter config for this channel (filters still apply with quality override)
       const filterConfig = ChannelFilterConfig.fromChannel(channel);
 
-      // Group by both subfolder and filter settings
-      const groupKey = `${subFolder || 'root'}|${filterConfig.buildFilterKey()}`;
+      // Group by subfolder, audio mode, and filter settings
+      const groupKey = `${subFolder || 'root'}|${isAudioOnly}|${filterConfig.buildFilterKey()}`;
 
       if (!groups.has(groupKey)) {
         groups.set(groupKey, {
           subFolder,
+          isAudioOnly,
           filterConfig,
           channels: []
         });
